@@ -109,48 +109,50 @@ def genmaze(options):
     return conn
 
 
-def print_maze(conn, width):
+def print_maze(conn, options):
     """Print a maze as box drawing characters.
 
     Assumes entrance/exit at top-left/bottom-right.
     """
+    space_char = {"space": '\x20', "nbsp": '\xa0', "dot": '\xb7'}[options.space]
     maze_cells = """
 ┌─┐
 └─┘
 ┌─┐
-│ │
+│ │
 ┌──
 └──
 ┌──
-│ ┌
-│ │
+│ ┌
+│ │
 └─┘
-│ │
-│ │
-│ └
+│ │
+│ │
+│ └
 └──
-│ └
-│ ┌
+│ └
+│ ┌
 ──┐
 ──┘
 ──┐
-┐ │
+┐ │
 ───
 ───
 ───
-┐ ┌
-┘ │
+┐ ┌
+┘ │
 ──┘
-┘ │
-┐ │
-┘ └
+┘ │
+┐ │
+┘ └
 ───
-┘ └
-┐ ┌
-┤ ├
-┤ ├
+┘ └
+┐ ┌
+┤ ├
+┤ ├
 ┴─┴
-┬─┬""".strip().split("\n")
+┬─┬""".strip().replace(' ', space_char).split("\n")
+    width = options.width
     # Collect into pairs
     maze_cells = list(zip(maze_cells[:-1:2], maze_cells[1::2]))
     for y in range(len(conn) // width):
@@ -169,12 +171,128 @@ def print_maze(conn, width):
                 print(maze_cells[idx][row], end="")
             print()
 
+
+def write_png(conn, options):
+    """Write a maze as a PNG.
+
+    Assumes entrance/exit at top-left/bottom-right.
+    """
+
+    image = Image.new(
+        size=(options.width * options.png_cell_width,
+              options.height * options.png_cell_width),
+        mode="P",
+        color=0)
+    image.putpalette([item for l in options.png_palette for item in l],
+                     rawmode = 'RGBA'[:len(options.png_palette[0])])
+    draw = ImageDraw.Draw(image)
+
+    w = options.width
+    wall_start = (options.png_cell_width - 2*options.png_wall_width -
+                   options.png_passage_width) // 2
+    main_start = wall_start + options.png_wall_width
+    main_end = main_start + options.png_passage_width
+    wall_end = main_end + options.png_wall_width
+
+    for y in range(-1, options.height):
+        base_y = y * options.png_cell_width
+        for x in range(-1, w):
+            pos = y * w + x
+            base_x = x * options.png_cell_width
+            draw.rectangle((base_x + main_start,
+                            base_y + main_start,
+                            base_x + main_end - 1,
+                            base_y + main_end - 1), fill=2)
+            if y==-1 and x == 0 or y >= 0 and x >= 0 and conn[pos]&1 or pos == len(conn) - 1:
+                # Connection down
+                draw.rectangle((base_x + main_start,
+                                base_y + main_end,
+                                base_x + main_end - 1,
+                                base_y + options.png_cell_width + main_start - 1), fill=2)
+                draw.rectangle((base_x + wall_start,
+                                base_y + main_end,
+                                base_x + main_start - 1,
+                                base_y + options.png_cell_width + main_start - 1), fill=1)
+                draw.rectangle((base_x + main_end,
+                                base_y + main_end,
+                                base_x + wall_end - 1,
+                                base_y + options.png_cell_width + main_start - 1), fill=1)
+            else:
+                draw.rectangle((base_x + wall_start,
+                                base_y + main_end,
+                                base_x + wall_end - 1,
+                                base_y + wall_end - 1), fill=1)
+                draw.rectangle((base_x + wall_start,
+                                base_y + options.png_cell_width + wall_start,
+                                base_x + wall_end - 1,
+                                base_y + options.png_cell_width + main_start - 1), fill=1)
+            if y >= 0 and x >= 0 and conn[pos]&2:
+                # Connection right
+                draw.rectangle((base_x + main_end,
+                                base_y + main_start,
+                                base_x + options.png_cell_width + main_start - 1,
+                                base_y + main_end - 1), fill=2)
+                draw.rectangle((base_x + wall_end,
+                                base_y + wall_start,
+                                base_x + options.png_cell_width + wall_start - 1,
+                                base_y + main_start - 1), fill=1)
+                draw.rectangle((base_x + wall_end,
+                                base_y + main_end,
+                                base_x + options.png_cell_width + wall_start - 1,
+                                base_y + wall_end - 1), fill=1)
+            else:
+                draw.rectangle((base_x + main_end,
+                                base_y + main_start,
+                                base_x + wall_end - 1,
+                                base_y + main_end - 1), fill=1)
+                draw.rectangle((base_x + options.png_cell_width + wall_start,
+                                base_y + main_start,
+                                base_x + options.png_cell_width + main_start - 1,
+                                base_y + main_end - 1), fill=1)
+            if y < 0 or x < 0:
+                continue
+            if conn[pos] == 7:
+                # Weave, vertical on top
+                draw.rectangle((base_x + wall_start,
+                                base_y + main_start,
+                                base_x + main_start - 1,
+                                base_y + main_end - 1), fill=1)
+                draw.rectangle((base_x + main_end,
+                                base_y + main_start,
+                                base_x + wall_end - 1,
+                                base_y + main_end - 1), fill=1)
+            elif conn[pos] == 11:
+                # Weave, horizontal on top
+                draw.rectangle((base_x + main_start,
+                                base_y + wall_start,
+                                base_x + main_end - 1,
+                                base_y + main_start - 1), fill=1)
+                draw.rectangle((base_x + main_start,
+                                base_y + main_end,
+                                base_x + main_end - 1,
+                                base_y + wall_end - 1), fill=1)
+    image.save(options.png_file, format="png", optimize=True, bits=2)
+
+
+def palette(arg):
+    """Parse a palette string."""
+    args = [x.strip() for x in arg.split(",")]
+    if len(args) != 4:
+        raise argparse.ArgumentTypeError(
+            "Need 4 palette args: bg_color,wall_color,fg_color,path_color")
+    pal = []
+    for i in args:
+        if len(i) not in (6,8):
+            raise argparse.ArgumentTypeError(f"'{i}' must be an RGB on RGBA hex string")
+        pal.append([int(i[x:x+2], 16) for x in range(0, len(i), 2)])
+    return pal
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        add_help=False,
+        conflict_handler="resolve",
         description=__doc__)
-    parser.add_argument("--help", action='help', help='show this help message and exit')
     parser.add_argument("-w", "--width", type=int, default=12,
         help="Width of the maze, in passages.")
     parser.add_argument("-h", "--height", type=int, default=12,
@@ -188,6 +306,15 @@ if __name__ == "__main__":
     parser.add_argument("-s", "--seed",
         help="The random number seed. If unspecified, urandom() will be used "
              "to generate and print a base64 seed.")
+    parser.add_argument("--space", default="space",
+        choices=["space", "nbsp", "dot"],
+        help="What type of space character to use when printing the maze.")
+    parser.add_argument("-p", "--png_file", type=argparse.FileType("wb"),
+        help="Write maze as a PNG instead of as Unicode, with the given filename.")
+    parser.add_argument("--png_cell_width", type=int, default=20)
+    parser.add_argument("--png_wall_width", type=int, default=2)
+    parser.add_argument("--png_passage_width", type=int, default=11)
+    parser.add_argument("--png_palette", type=palette, default="000000,CFCFCF,1B1B1B,328232")
     args = parser.parse_args()
 
     if not args.seed:
@@ -198,4 +325,8 @@ if __name__ == "__main__":
         args.seed = seed
 
     maze = genmaze(args)
-    print_maze(maze, args.width)
+    if args.png_file:
+        from PIL import Image, ImageDraw
+        write_png(maze, args)
+    else:
+        print_maze(maze, args)
